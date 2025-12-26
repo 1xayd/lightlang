@@ -1,7 +1,7 @@
 # lightlang
 A simple experiment language written in 2 days (of editor time) in golang.
 I thought it'd be nice to make something like luau typescript python and other languages in golang so i decided to make this;
-the 2 days thing is a lie there were earlier versions of this project that are terrible and cant even run anything unlike this one. 
+The 2 days thing is a lie there were versions of this project from 8-9 months ago that were terrible, written completely by ai, and were over 30 MB in size when compiled 💀 and cant even run anything unlike this one. 
 This is the best iteration of this project yet.
 
 
