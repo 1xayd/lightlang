@@ -2,8 +2,11 @@ package builtins
 
 import (
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -28,13 +31,7 @@ func toFloat64(val interface{}) float64 {
 
 var Builtins = map[string]BuiltinFunc{
 	"print": func(args []interface{}) (interface{}, error) {
-		for i, arg := range args {
-			if i > 0 {
-				fmt.Print(" ")
-			}
-			fmt.Print(arg)
-		}
-		fmt.Println()
+		fmt.Print(fmt.Sprintln(args...))
 		return nil, nil
 	},
 
@@ -422,7 +419,7 @@ var Builtins = map[string]BuiltinFunc{
 		if s, ok1 := args[0].(string); ok1 {
 			if sub, ok2 := args[1].(string); ok2 {
 				index := strings.Index(s, sub)
-				return float64(index), nil // returns -1 if not found
+				return float64(index), nil
 			}
 		}
 		return nil, fmt.Errorf("find requires strings")
@@ -478,7 +475,7 @@ var Builtins = map[string]BuiltinFunc{
 			return nil, fmt.Errorf("tick expects 0 arguments")
 		}
 		now := time.Now()
-		return float64(now.Unix()) + float64(now.Nanosecond())/1e10, nil
+		return float64(now.Unix()) + float64(now.Nanosecond())/1e9, nil
 	},
 
 	"time": func(args []interface{}) (interface{}, error) {
@@ -602,5 +599,97 @@ var Builtins = map[string]BuiltinFunc{
 		default:
 			return nil, fmt.Errorf("cannot convert to number")
 		}
+	},
+	"writefile": func(args []interface{}) (interface{}, error) {
+		if len(args) != 2 {
+			return nil, fmt.Errorf("writefile expects 2 arguments (filename, content)")
+		}
+
+		filename, ok1 := args[0].(string)
+		if !ok1 {
+			return nil, fmt.Errorf("writefile filename must be string")
+		}
+
+		content := fmt.Sprintf("%v", args[1])
+
+		dir := filepath.Dir(filename)
+		if dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create directory: %v", err)
+			}
+		}
+
+		err := ioutil.WriteFile(filename, []byte(content), 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write file: %v", err)
+		}
+
+		return nil, nil
+	},
+
+	"readfile": func(args []interface{}) (interface{}, error) {
+		if len(args) != 1 {
+			return nil, fmt.Errorf("readfile expects 1 argument (filename)")
+		}
+
+		filename, ok := args[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("readfile filename must be string")
+		}
+
+		data, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file: %v", err)
+		}
+
+		return string(data), nil
+	},
+
+	"makedir": func(args []interface{}) (interface{}, error) {
+		if len(args) != 1 {
+			return nil, fmt.Errorf("makedir expects 1 argument (dirname)")
+		}
+
+		dirname, ok := args[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("makedir dirname must be string")
+		}
+
+		err := os.MkdirAll(dirname, 0755)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create directory: %v", err)
+		}
+
+		return nil, nil
+	},
+
+	"gotodir": func(args []interface{}) (interface{}, error) {
+		if len(args) != 1 {
+			return nil, fmt.Errorf("gotodir expects 1 argument (dirname)")
+		}
+
+		dirname, ok := args[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("gotodir dirname must be string")
+		}
+
+		info, err := os.Stat(dirname)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fmt.Errorf("directory does not exist: %s", dirname)
+			}
+			return nil, fmt.Errorf("failed to access directory: %v", err)
+		}
+
+		if !info.IsDir() {
+			return nil, fmt.Errorf("not a directory: %s", dirname)
+		}
+
+		err = os.Chdir(dirname)
+		if err != nil {
+			return nil, fmt.Errorf("failed to change directory: %v", err)
+		}
+
+		return nil, nil
 	},
 }
