@@ -574,6 +574,13 @@ func (p *Parser) matchKeywordAtPos(kw string, pos int) bool {
 func (p *Parser) readUntil(stopChar string) string {
 	start := p.pos
 	for p.pos < len(p.input) && string(p.input[p.pos]) != stopChar {
+		if p.input[p.pos] == '-' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '-' {
+			p.pos += 2
+			for p.pos < len(p.input) && p.input[p.pos] != '\n' {
+				p.pos++
+			}
+			continue
+		}
 		p.pos++
 	}
 	result := p.input[start:p.pos]
@@ -1167,6 +1174,15 @@ func (p *Parser) skipWhitespace() {
 		} else if c == '\n' {
 			p.line++
 			p.pos++
+		} else if c == '-' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '-' {
+			p.pos += 2
+			for p.pos < len(p.input) && p.input[p.pos] != '\n' {
+				p.pos++
+			}
+			if p.pos < len(p.input) && p.input[p.pos] == '\n' {
+				p.line++
+				p.pos++
+			}
 		} else {
 			break
 		}
@@ -1202,6 +1218,15 @@ func (p *Parser) readUntilTerminator() string {
 	start := p.pos
 	for p.pos < len(p.input) {
 		c := p.input[p.pos]
+
+		if c == '-' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '-' {
+			p.pos += 2
+			for p.pos < len(p.input) && p.input[p.pos] != '\n' {
+				p.pos++
+			}
+			continue
+		}
+
 		if c == ';' || c == '\n' || c == '\r' {
 			break
 		}
@@ -1215,6 +1240,14 @@ func (p *Parser) readUntilKeyword(kw string) string {
 	start := p.pos
 	depth := 0
 	for p.pos < len(p.input) {
+		if p.input[p.pos] == '-' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '-' {
+			p.pos += 2
+			for p.pos < len(p.input) && p.input[p.pos] != '\n' {
+				p.pos++
+			}
+			continue
+		}
+
 		if p.input[p.pos] == '(' {
 			depth++
 		} else if p.input[p.pos] == ')' {
