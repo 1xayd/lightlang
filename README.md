@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/1xayd1/lightlang/refs/heads/main/Untitled.svg" 
+<img src="https://raw.githubusercontent.com/1xayd1/lightlang/refs/heads/main/logo.svg" 
      width="100" 
      alt="Logo">
 # lightlang
