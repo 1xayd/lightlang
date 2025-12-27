@@ -12,7 +12,7 @@ let quotient = a / 2
 let greeting = "Hello" + " " + "World"
 let mixed_concat = "Number: " + a
 
-print "-------------------------------"
+print("-------------------------------")
 print(sum)
 print(diff)
 print(product)
@@ -64,14 +64,4 @@ print("type of number 1 is " + type(number1) + "!")
 print("converting it to string...")
 number1 = tostring(number1)
 print("the type is now: " + type(number1) + "!")
-print("-------------------------------")
-func gamble()
-    if random(1, 10) <= 4 then
-        return true
-    else
-        return false
-    end
-end
-
-print("gambling is bad but here it is anyway... Did you win a lottery? " + gamble())
 print("-------------------------------")
