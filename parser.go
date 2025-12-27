@@ -126,25 +126,34 @@ func (p *Parser) parseAssignmentOrExpr() (Node, error) {
 	}
 
 	start := p.pos
+
 	for p.pos < len(p.input) {
 		ch := p.input[p.pos]
 		if ch == ';' || ch == '\n' || ch == '\r' {
 			break
 		}
 		if ch == '=' {
-			// is ==?
 			if p.pos+1 < len(p.input) && p.input[p.pos+1] == '=' {
-				p.pos++ // skip
+				p.pos += 2
 				continue
 			}
 			break
 		}
 		p.pos++
 	}
+
 	leftStr := strings.TrimSpace(p.input[start:p.pos])
 
+	if strings.HasPrefix(strings.TrimSpace(leftStr), "func") {
+		exprNode, err := parseExpression(leftStr)
+		if err != nil {
+			return nil, err
+		}
+		return &ExprStmtNode{Expr: exprNode}, nil
+	}
+
 	if p.pos < len(p.input) && p.input[p.pos] == '=' {
-		p.pos++ // let = DIE again
+		p.pos++ // Skip the '='
 		p.skipWhitespace()
 		rightStr := p.readUntilTerminator()
 
@@ -260,6 +269,88 @@ func (p *Parser) parseIfStatement() (Node, error) {
 		Conditions: conditions,
 		Bodies:     bodies,
 		ElseBody:   elseBody,
+	}, nil
+}
+
+func (p *ExprParser) parseFunctionExpression() (Node, error) {
+	if err := p.consume("LPAREN"); err != nil {
+		return nil, err
+	}
+
+	var params []string
+	if !p.match("RPAREN") {
+		for {
+			if p.match("WORD") {
+				param := p.advance().Value
+				params = append(params, param)
+			} else {
+				return nil, fmt.Errorf("expected parameter name")
+			}
+
+			if p.match("COMMA") {
+				p.advance()
+				continue
+			} else if p.match("RPAREN") {
+				break
+			} else {
+				return nil, fmt.Errorf("expected ',' or ')' in parameter list")
+			}
+		}
+	}
+	if err := p.consume("RPAREN"); err != nil {
+		return nil, err
+	}
+
+	p.skipWhitespace()
+
+	var body []Node
+
+	if p.match("KW", "do") {
+		p.advance()
+		for !p.match("KW", "end") {
+			stmt, err := p.parseOr()
+			if err != nil {
+				return nil, err
+			}
+			body = append(body, &ExprStmtNode{Expr: stmt})
+
+			if p.match("SEMICOLON") {
+				p.advance()
+			}
+		}
+		if err := p.consume("KW", "end"); err != nil {
+			return nil, err
+		}
+	} else {
+		p.skipWhitespace()
+		if p.match("KW", "return") {
+			p.advance()
+			p.skipWhitespace()
+			expr, err := p.parseOr()
+			if err != nil {
+				return nil, err
+			}
+			body = []Node{&ReturnNode{Value: expr}}
+			p.skipWhitespace()
+			if p.match("KW", "end") {
+				p.advance()
+			}
+		} else {
+			expr, err := p.parseOr()
+			if err != nil {
+				return nil, err
+			}
+			body = []Node{&ReturnNode{Value: expr}}
+			p.skipWhitespace()
+			if p.match("KW", "end") {
+				p.advance()
+			}
+		}
+	}
+
+	return &AnonymousFuncNode{
+		Params: params,
+		Body:   body,
 	}, nil
 }
 
@@ -585,7 +676,7 @@ func (p *Parser) readUntil(stopChar string) string {
 	}
 	result := p.input[start:p.pos]
 	if p.pos < len(p.input) && string(p.input[p.pos]) == stopChar {
-		p.pos++ // skip the stop character
+		p.pos++
 	}
 	return strings.TrimSpace(result)
 }
@@ -766,6 +857,12 @@ func (p *Parser) parseBlockUntil(stopKeywords []string) ([]Node, error) {
 	return nodes, nil
 }
 
+func (p *ExprParser) skipWhitespace() {
+	for p.pos < len(p.tokens) && (p.tokens[p.pos].Type == "WHITESPACE" || p.tokens[p.pos].Type == "COMMENT") {
+		p.pos++
+	}
+}
+
 func parseExpression(s string) (Node, error) {
 	tokens := tokenize(s)
 	if len(tokens) == 0 {
@@ -817,8 +914,10 @@ func tokenize(s string) []Token {
 				i++
 			}
 			val := s[start:i]
-			if val == "and" || val == "or" || val == "not" {
+			if val == "and" || val == "or" || val == "not" || val == "func" || val == "do" || val == "end" {
 				tokens = append(tokens, Token{Type: "KW", Value: val})
+			} else if val == "true" || val == "false" || val == "nil" {
+				tokens = append(tokens, Token{Type: "LITERAL", Value: val})
 			} else {
 				tokens = append(tokens, Token{Type: "WORD", Value: val})
 			}
@@ -835,6 +934,9 @@ func tokenize(s string) []Token {
 		}
 
 		switch ch {
+		case ';':
+			tokens = append(tokens, Token{Type: "SEMICOLON", Value: ";"})
+			i++
 		case '+', '*', '/', '<', '>', '=':
 			tokens = append(tokens, Token{Type: "OP", Value: string(ch)})
 			i++
@@ -1044,10 +1146,23 @@ func (p *ExprParser) parseAccess() (Node, error) {
 				}
 			}
 			p.advance() // )
-			if v, ok := node.(*VariableNode); ok {
+
+			if _, ok := node.(*AnonymousFuncNode); ok {
+				node = &CallNode{
+					Target:         "",
+					Args:           args,
+					CallType:       "indirect",
+					IndirectTarget: node,
+				}
+			} else if v, ok := node.(*VariableNode); ok {
 				node = &CallNode{Target: v.Name, Args: args, CallType: "direct"}
 			} else {
-				node = &CallNode{Target: "", Args: args, CallType: "indirect", IndirectTarget: node}
+				node = &CallNode{
+					Target:         "",
+					Args:           args,
+					CallType:       "indirect",
+					IndirectTarget: node,
+				}
 			}
 			continue
 		}
@@ -1088,6 +1203,9 @@ func (p *ExprParser) parseBase() (Node, error) {
 		}
 		if tok.Value == "false" {
 			return &LiteralNode{Value: false, Type: "bool"}, nil
+		}
+		if tok.Value == "func" {
+			return p.parseFunctionExpression()
 		}
 		return &VariableNode{Name: tok.Value}, nil
 	}
@@ -1152,6 +1270,10 @@ func (p *ExprParser) parseBase() (Node, error) {
 
 	if tok.Type == "LPAREN" {
 		p.advance()
+		if p.match("KW", "func") {
+			p.advance()
+			return p.parseFunctionExpression()
+		}
 		node, err := p.parseOr()
 		if err != nil {
 			return nil, err
