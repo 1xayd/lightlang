@@ -126,99 +126,81 @@ func (p *Parser) parseAssignmentOrExpr() (Node, error) {
 	}
 
 	start := p.pos
-	inString := false
-	escape := false
-	parenDepth := 0
-
 	for p.pos < len(p.input) {
 		ch := p.input[p.pos]
-
-		if escape {
-			escape = false
-			p.pos++
-			continue
+		if ch == ';' || ch == '\n' || ch == '\r' {
+			break
 		}
-
-		if ch == '\\' {
-			escape = true
-			p.pos++
-			continue
-		}
-
-		if ch == '"' {
-			inString = !inString
-			p.pos++
-			continue
-		}
-
-		if !inString {
-			if ch == '(' {
-				parenDepth++
-			} else if ch == ')' {
-				parenDepth--
+		if ch == '=' {
+			// is ==?
+			if p.pos+1 < len(p.input) && p.input[p.pos+1] == '=' {
+				p.pos++ // skip
+				continue
 			}
-
-			if ch == ';' || ch == '\n' || ch == '\r' {
-				break
-			}
-
-			if ch == '=' && parenDepth == 0 {
-				if p.pos+1 < len(p.input) && p.input[p.pos+1] == '=' {
-					p.pos += 2 // Skip '=='
-					continue
-				}
-				if p.pos > 0 {
-					prevChar := p.input[p.pos-1]
-					if prevChar == '!' || prevChar == '<' || prevChar == '>' {
-						p.pos++
-						continue
-					}
-				}
-				break
-			}
+			break
 		}
 		p.pos++
 	}
-
 	leftStr := strings.TrimSpace(p.input[start:p.pos])
 
-	if p.pos < len(p.input) && p.input[p.pos] == '=' && parenDepth == 0 {
-		if p.pos > 0 && p.input[p.pos-1] == '=' {
-		} else if p.pos > 0 && (p.input[p.pos-1] == '!' || p.input[p.pos-1] == '<' || p.input[p.pos-1] == '>') {
-		} else {
-			p.pos++
-			p.skipWhitespace()
-			rightStr := p.readUntilTerminator()
+	if p.pos < len(p.input) && p.input[p.pos] == '=' {
+		p.pos++ // let = DIE again
+		p.skipWhitespace()
+		rightStr := p.readUntilTerminator()
 
-			// Handle index assignment
-			if strings.Contains(leftStr, "[") && strings.Contains(leftStr, "]") {
-				// ... index assignment logic
-			}
+		if strings.Contains(leftStr, "[") {
+			bracketOpen := strings.LastIndex(leftStr, "[")
+			if bracketOpen != -1 {
+				tablePart := strings.TrimSpace(leftStr[:bracketOpen])
+				insideBracket := strings.TrimSpace(leftStr[bracketOpen+1:])
 
-			if !isVariable(leftStr) {
-				return nil, fmt.Errorf("invalid left side of assignment: %s", leftStr)
-			}
-			valueNode, err := parseExpression(rightStr)
-			if err != nil {
-				return nil, err
-			}
+				bracketClose := strings.Index(insideBracket, "]")
+				if bracketClose == -1 {
+					return nil, fmt.Errorf("missing closing bracket")
+				}
+				indexPart := insideBracket[:bracketClose]
 
-			return &AssignmentNode{
-				Name: leftStr,
-				Expr: valueNode,
-			}, nil
+				tableNode, err := parseExpression(tablePart)
+				if err != nil {
+					return nil, err
+				}
+				indexNode, err := parseExpression(indexPart)
+				if err != nil {
+					return nil, err
+				}
+				valueNode, err := parseExpression(rightStr)
+				if err != nil {
+					return nil, err
+				}
+
+				return &IndexAssignNode{
+					Table: tableNode,
+					Index: indexNode,
+					Value: valueNode,
+				}, nil
+			}
 		}
+
+		if !isVariable(leftStr) {
+			return nil, fmt.Errorf("invalid left side of assignment: %s", leftStr)
+		}
+		valueNode, err := parseExpression(rightStr)
+		if err != nil {
+			return nil, err
+		}
+		return &AssignmentNode{
+			Name: leftStr,
+			Expr: valueNode,
+		}, nil
 	}
 
 	if leftStr == "" {
 		return nil, nil
 	}
-
 	exprNode, err := parseExpression(leftStr)
 	if err != nil {
 		return nil, err
 	}
-
 	return &ExprStmtNode{Expr: exprNode}, nil
 }
 
@@ -596,7 +578,7 @@ func (p *Parser) readUntil(stopChar string) string {
 	}
 	result := p.input[start:p.pos]
 	if p.pos < len(p.input) && string(p.input[p.pos]) == stopChar {
-		p.pos++
+		p.pos++ // skip the stop character
 	}
 	return strings.TrimSpace(result)
 }
@@ -1095,10 +1077,10 @@ func (p *ExprParser) parseBase() (Node, error) {
 	if tok.Type == "WORD" || tok.Type == "KW" {
 		p.advance()
 		if tok.Value == "true" {
-			return &LiteralNode{Value: 1.0, Type: "number"}, nil
+			return &LiteralNode{Value: true, Type: "bool"}, nil
 		}
 		if tok.Value == "false" {
-			return &LiteralNode{Value: 0.0, Type: "number"}, nil
+			return &LiteralNode{Value: false, Type: "bool"}, nil
 		}
 		return &VariableNode{Name: tok.Value}, nil
 	}
@@ -1218,37 +1200,13 @@ func (p *Parser) consumeTerminator() {
 
 func (p *Parser) readUntilTerminator() string {
 	start := p.pos
-	inString := false
-	escape := false
-
 	for p.pos < len(p.input) {
 		c := p.input[p.pos]
-
-		if escape {
-			escape = false
-			p.pos++
-			continue
-		}
-
-		if c == '\\' {
-			escape = true
-			p.pos++
-			continue
-		}
-
-		if c == '"' {
-			inString = !inString
-			p.pos++
-			continue
-		}
-
-		if !inString && (c == ';' || c == '\n' || c == '\r') {
+		if c == ';' || c == '\n' || c == '\r' {
 			break
 		}
-
 		p.pos++
 	}
-
 	res := strings.TrimSpace(p.input[start:p.pos])
 	return res
 }
@@ -1285,7 +1243,7 @@ func isVariable(s string) bool {
 			return false
 		}
 	}
-	kw := []string{"true", "false", "let", "print", "while", "do", "end", "if", "then", "else", "elseif", "func", "and", "or", "not", "return", "break"}
+	kw := []string{"true", "false", "let", "while", "do", "end", "if", "then", "else", "elseif", "func", "and", "or", "not", "return", "break"}
 	for _, k := range kw {
 		if s == k {
 			return false
