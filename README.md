@@ -2,7 +2,7 @@
      width="100" 
      alt="Logo">
 # lightlang
-A simple experiment language written in 2 days (of editor time) in golang.
+A simple experiment language implemented in golang.
 I thought it'd be nice to make something like luau typescript python and other languages in golang so i decided to make this;
 
 To build your own version of the project use build.bat file:
