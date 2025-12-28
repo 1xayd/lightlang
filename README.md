@@ -28,5 +28,5 @@ This will output .llbytecode file with the name of the original file e.g:
 
 To run your files directly:
 ```
-	lightlang run example.ll
+	lightlang .\example.ll
 ```
