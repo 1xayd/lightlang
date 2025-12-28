@@ -1,6 +1,7 @@
 package builtins
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -33,6 +34,45 @@ var Builtins = map[string]BuiltinFunc{
 	"print": func(args []interface{}) (interface{}, error) {
 		fmt.Print(fmt.Sprintln(args...))
 		return nil, nil
+	},
+
+	"input": func(args []interface{}) (interface{}, error) {
+		if len(args) > 1 {
+			return nil, fmt.Errorf("input expects 0 or 1 argument (prompt)")
+		}
+
+		if len(args) == 1 {
+			if prompt, ok := args[0].(string); ok {
+				fmt.Print(prompt)
+			} else {
+				return nil, fmt.Errorf("input prompt must be string")
+			}
+		}
+
+		reader := bufio.NewReader(os.Stdin)
+		text, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, fmt.Errorf("failed to read input: %v", err)
+		}
+
+		text = strings.TrimSuffix(text, "\n")
+		text = strings.TrimSuffix(text, "\r")
+
+		return text, nil
+	},
+
+	"args": func(args []interface{}) (interface{}, error) {
+		if len(args) > 0 {
+			return nil, fmt.Errorf("args expects 0 arguments")
+		}
+
+		cmdArgs := os.Args[1:]
+		result := make([]interface{}, len(cmdArgs))
+		for i, arg := range cmdArgs {
+			result[i] = arg
+		}
+
+		return result, nil
 	},
 
 	"range": func(args []interface{}) (interface{}, error) {
