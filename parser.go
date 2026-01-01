@@ -314,9 +314,11 @@ func (p *ExprParser) parseFunctionExpression() (Node, error) {
 			}
 			body = append(body, &ExprStmtNode{Expr: stmt})
 
+			p.skipWhitespace()
 			if p.match("SEMICOLON") {
 				p.advance()
 			}
+			p.skipWhitespace()
 		}
 		if err := p.consume("KW", "end"); err != nil {
 			return nil, err
@@ -914,7 +916,7 @@ func tokenize(s string) []Token {
 				i++
 			}
 			val := s[start:i]
-			if val == "and" || val == "or" || val == "not" || val == "func" || val == "do" || val == "end" {
+			if val == "and" || val == "or" || val == "not" || val == "func" || val == "do" || val == "end" || val == "return" {
 				tokens = append(tokens, Token{Type: "KW", Value: val})
 			} else if val == "true" || val == "false" || val == "nil" {
 				tokens = append(tokens, Token{Type: "LITERAL", Value: val})
@@ -1338,6 +1340,11 @@ func (p *Parser) consumeTerminator() {
 
 func (p *Parser) readUntilTerminator() string {
 	start := p.pos
+	blockDepth := 0
+	parenDepth := 0
+	bracketDepth := 0
+	braceDepth := 0
+
 	for p.pos < len(p.input) {
 		c := p.input[p.pos]
 
@@ -1349,9 +1356,44 @@ func (p *Parser) readUntilTerminator() string {
 			continue
 		}
 
-		if c == ';' || c == '\n' || c == '\r' {
+		if c == '"' {
+			p.pos++
+			for p.pos < len(p.input) && p.input[p.pos] != '"' {
+				p.pos++
+			}
+			if p.pos < len(p.input) {
+				p.pos++
+			}
+			continue
+		}
+
+		if p.matchKeywordAtPos("do", p.pos) || p.matchKeywordAtPos("then", p.pos) {
+			blockDepth++
+		} else if p.matchKeywordAtPos("end", p.pos) {
+			if blockDepth > 0 {
+				blockDepth--
+			}
+		}
+
+		if c == '(' {
+			parenDepth++
+		} else if c == ')' {
+			parenDepth--
+		} else if c == '[' {
+			bracketDepth++
+		} else if c == ']' {
+			bracketDepth--
+		} else if c == '{' {
+			braceDepth++
+		} else if c == '}' {
+			braceDepth--
+		}
+
+		if blockDepth == 0 && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 &&
+			(c == ';' || c == '\n' || c == '\r') {
 			break
 		}
+
 		p.pos++
 	}
 	res := strings.TrimSpace(p.input[start:p.pos])
@@ -1360,28 +1402,31 @@ func (p *Parser) readUntilTerminator() string {
 
 func (p *Parser) readUntilKeyword(kw string) string {
 	start := p.pos
-	depth := 0
+	parenDepth := 0
+	bracketDepth := 0
+	braceDepth := 0
+
 	for p.pos < len(p.input) {
-		if p.input[p.pos] == '-' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '-' {
-			p.pos += 2
-			for p.pos < len(p.input) && p.input[p.pos] != '\n' {
-				p.pos++
-			}
-			continue
+		if p.input[p.pos] == '(' {
+			parenDepth++
+		} else if p.input[p.pos] == ')' {
+			parenDepth--
+		} else if p.input[p.pos] == '[' {
+			bracketDepth++
+		} else if p.input[p.pos] == ']' {
+			bracketDepth--
+		} else if p.input[p.pos] == '{' {
+			braceDepth++
+		} else if p.input[p.pos] == '}' {
+			braceDepth--
 		}
 
-		if p.input[p.pos] == '(' {
-			depth++
-		} else if p.input[p.pos] == ')' {
-			depth--
-		}
-		if depth == 0 && p.matchKeyword(kw) {
+		if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 && p.matchKeyword(kw) {
 			break
 		}
 		p.pos++
 	}
 	res := strings.TrimSpace(p.input[start:p.pos])
-	p.pos += len(kw) // should probably remove this ugly hack
 	return res
 }
 
@@ -1415,4 +1460,3 @@ func isStopKeyword(s string) bool {
 	}
 	return false
 }
-
